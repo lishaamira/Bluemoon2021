@@ -1,0 +1,7 @@
+Bluemoon 2021 (System Hacking Practice - Lab 2)
+
+Bluemoon (Victim)
+Kali Linux (Attacker, me)
+
+1. Run <sudo netdiscover> command to find victim's IP. 
+
